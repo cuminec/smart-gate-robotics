@@ -15,3 +15,6 @@ A vehicle detection system using ESP32, HC-SR04 ultrasonic sensor, servo motor, 
 - **Part 1:** Open `smart_gate.ino` in Arduino IDE with ESP32Servo library installed
 - **Part 2:** Open `blockly_demo.html` in any browser (internet required)
 - **Part 3:** Open `smart_gate_dashboard.html` in any browser (no internet needed)
+
+A shareable Wokwi project link showing the wired circuit and working
+https://wokwi.com/projects/464929719588484097
