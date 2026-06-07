@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartGate — Site Management Dashboard</title>
+
+  <!-- Fonts: Rajdhani (industrial display) + Share Tech Mono (data readout) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Rajdhani', 'sans-serif'],
+            mono: ['Share Tech Mono', 'monospace'],
+            body: ['Exo 2', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ── CSS Variables ─────────────────────────────────── */
+    :root {
+      --col-bg:        #070c14;
+      --col-panel:     #0d1520;
+      --col-border:    #1a2a3a;
+      --col-accent:    #00d4ff;
+      --col-accent2:   #0077ff;
+      --col-red:       #ff3b3b;
+      --col-green:     #00ff88;
+      --col-blue:      #3b9eff;
+      --col-amber:     #ffb800;
+      --col-text:      #c8dae8;
+      --col-muted:     #3d5a72;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--col-bg);
+      color: var(--col-text);
+      font-family: 'Exo 2', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated grid background ─────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Scanline overlay ─────────────────────────────── */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,.08) 2px,
+        rgba(0,0,0,.08) 4px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Panel / card base ───────────────────────────── */
+    .panel {
+      background: var(--col-panel);
+      border: 1px solid var(--col-border);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Corner decorators */
+    .panel::before, .panel::after {
+      content: '';
+      position: absolute;
+      width: 10px; height: 10px;
+      border-color: var(--col-accent);
+      border-style: solid;
+      opacity: .6;
+    }
+    .panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .panel::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+    /* ── Status badge ────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 18px;
+      border-radius: 3px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .85rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      border: 1px solid;
+      transition: all .3s ease;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ── Gate status states ──────────────────────────── */
+    .gate-closed   { color: var(--col-muted);  border-color: var(--col-muted);  }
+    .gate-closed .status-dot { background: var(--col-muted); }
+
+    .gate-opening  { color: var(--col-red);    border-color: var(--col-red);    }
+    .gate-opening .status-dot {
+      background: var(--col-red);
+      animation: blink .25s steps(1) infinite;
+    }
+
+    .gate-open     { color: var(--col-green);  border-color: var(--col-green);  }
+    .gate-open .status-dot {
+      background: var(--col-green);
+      animation: pulse-green 1s ease-in-out infinite;
+    }
+
+    .gate-closing  { color: var(--col-blue);   border-color: var(--col-blue);   }
+    .gate-closing .status-dot {
+      background: var(--col-blue);
+      animation: blink .25s steps(1) infinite;
+    }
+
+    /* ── Servo arc ───────────────────────────────────── */
+    #servo-needle {
+      transform-origin: 50% 90%;
+      transition: transform 1s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Gate bar animation ──────────────────────────── */
+    #gate-bar {
+      transform-origin: left center;
+      transition: transform .8s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── RGB LED circle ──────────────────────────────── */
+    #rgb-led {
+      transition: fill .3s ease, filter .3s ease;
+    }
+
+    /* ── Sensor wave animation ───────────────────────── */
+    .sensor-wave {
+      animation: sonar 1.4s ease-out infinite;
+      transform-origin: center;
+    }
+    .sensor-wave:nth-child(2) { animation-delay: .4s; }
+    .sensor-wave:nth-child(3) { animation-delay: .8s; }
+
+    /* ── Log feed ────────────────────────────────────── */
+    #event-log {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .75rem;
+      line-height: 1.8;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--col-border) transparent;
+    }
+
+    .log-entry { opacity: 0; animation: fadeInLog .3s ease forwards; }
+    .log-ts    { color: var(--col-muted); }
+    .log-ok    { color: var(--col-green); }
+    .log-warn  { color: var(--col-amber); }
+    .log-info  { color: var(--col-accent); }
+    .log-close { color: var(--col-blue); }
+
+    /* ── Distance bar ────────────────────────────────── */
+    #dist-bar-fill {
+      transition: width .5s ease, background-color .3s ease;
+    }
+
+    /* ── Button ──────────────────────────────────────── */
+    .sim-btn {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      font-size: .95rem;
+      background: transparent;
+      border: 1px solid var(--col-accent);
+      color: var(--col-accent);
+      padding: 10px 28px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: color .2s, border-color .2s;
+    }
+    .sim-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--col-accent);
+      transform: translateX(-110%);
+      transition: transform .25s ease;
+      z-index: -1;
+    }
+    .sim-btn:hover { color: var(--col-bg); }
+    .sim-btn:hover::before { transform: translateX(0); }
+    .sim-btn:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+    .sim-btn:disabled::before { transform: translateX(-110%); }
+    .sim-btn:disabled { color: var(--col-accent); }
+
+    /* ── Keyframes ───────────────────────────────────── */
+    @keyframes blink    { 50% { opacity: 0; } }
+    @keyframes pulse-green {
+      0%,100% { box-shadow: 0 0 4px var(--col-green); opacity: 1; }
+      50%      { box-shadow: 0 0 14px var(--col-green); opacity: .7; }
+    }
+    @keyframes sonar {
+      0%   { transform: scale(.5); opacity: .8; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    @keyframes fadeInLog {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes glowPulse {
+      0%,100% { text-shadow: 0 0 6px var(--col-accent); }
+      50%      { text-shadow: 0 0 20px var(--col-accent), 0 0 40px var(--col-accent2); }
+    }
+
+    .glow-text { animation: glowPulse 2s ease-in-out infinite; }
+
+    /* ── Uptime ticker ───────────────────────────────── */
+    #uptime-val { font-family: 'Share Tech Mono', monospace; }
+  </style>
+</head>
+
+<body class="p-4 md:p-6">
+
+  <!-- ═══════════════════════════════════════════════════════
+       TOP BAR
+  ════════════════════════════════════════════════════════ -->
+  <header class="relative z-10 flex items-center justify-between mb-6">
+    <div class="flex items-center gap-4">
+      <!-- Logo mark -->
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <polygon points="18,2 34,10 34,26 18,34 2,26 2,10" fill="none" stroke="var(--col-accent)" stroke-width="1.5"/>
+        <polygon points="18,8 28,13 28,23 18,28 8,23 8,13" fill="none" stroke="var(--col-accent2)" stroke-width="1"/>
+        <circle cx="18" cy="18" r="4" fill="var(--col-accent)"/>
+      </svg>
+      <div>
+        <h1 class="font-display font-700 text-xl tracking-widest glow-text" style="color:var(--col-accent)">
+          SMARTGATE
+        </h1>
+        <p class="text-xs tracking-widest" style="color:var(--col-muted); font-family:'Share Tech Mono',monospace">
+          SITE MANAGEMENT SYSTEM v2.4
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-6">
+      <!-- Live clock -->
+      <div class="text-right hidden md:block">
+        <div id="clock-time" class="font-mono text-lg" style="color:var(--col-accent)">--:--:--</div>
+        <div id="clock-date" class="text-xs" style="color:var(--col-muted); font-family:'Share Tech Mono',monospace">--/--/----</div>
+      </div>
+      <!-- System status pill -->
+      <div class="status-badge gate-open" style="font-size:.7rem">
+        <span class="status-dot"></span>SYSTEM ONLINE
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN GRID
+  ════════════════════════════════════════════════════════ -->
+  <main class="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    <!-- ── COL 1: Gate Visualiser + Control ──────────────── -->
+    <div class="md:col-span-1 flex flex-col gap-4">
+
+      <!-- Gate SVG Panel -->
+      <div class="panel p-4">
+        <div class="flex items-center justify-between mb-3">
+          <span class="font-display font-600 tracking-widest text-sm" style="color:var(--col-muted)">GATE · UNIT-01</span>
+          <span id="gate-status-badge" class="status-badge gate-closed">
+            <span class="status-dot"></span>
+            <span id="gate-status-text">Gate Closed</span>
+          </span>
+        </div>
+
+        <!-- Gate SVG illustration -->
+        <svg viewBox="0 0 220 160" class="w-full" style="background:rgba(0,0,0,.3); border:1px solid var(--col-border)">
+          <!-- Road -->
+          <rect x="0" y="110" width="220" height="50" fill="#111820"/>
+          <rect x="0" y="108" width="220" height="4" fill="#1a2a3a"/>
+          <!-- Road markings -->
+          <rect x="20" y="128" width="30" height="4" fill="#2a3a4a" rx="2"/>
+          <rect x="70" y="128" width="30" height="4" fill="#2a3a4a" rx="2"/>
+          <rect x="120" y="128" width="30" height="4" fill="#2a3a4a" rx="2"/>
+          <rect x="170" y="128" width="30" height="4" fill="#2a3a4a" rx="2"/>
+          <!-- Gate post left -->
+          <rect x="18" y="40" width="10" height="72" fill="#1a3050" stroke="var(--col-border)" stroke-width="1"/>
+          <!-- Gate post right -->
+          <rect x="192" y="40" width="10" height="72" fill="#1a3050" stroke="var(--col-border)" stroke-width="1"/>
+
+          <!-- Gate bar (the arm that moves) -->
+          <g id="gate-bar">
+            <rect x="28" y="72" width="164" height="8" rx="2" fill="var(--col-accent2)" opacity=".9"/>
+            <!-- Stripes on bar -->
+            <rect x="50"  y="72" width="12" height="8" fill="var(--col-amber)" opacity=".7" rx="1"/>
+            <rect x="90"  y="72" width="12" height="8" fill="var(--col-amber)" opacity=".7" rx="1"/>
+            <rect x="130" y="72" width="12" height="8" fill="var(--col-amber)" opacity=".7" rx="1"/>
+            <rect x="170" y="72" width="12" height="8" fill="var(--col-amber)" opacity=".7" rx="1"/>
+          </g>
+
+          <!-- RGB LED on post -->
+          <circle id="rgb-led" cx="23" cy="55" r="5" fill="#3d5a72" filter="url(#ledGlow)"/>
+          <defs>
+            <filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur id="led-blur" stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Servo schematic (bottom left) -->
+          <g transform="translate(10,115)">
+            <rect x="0" y="0" width="28" height="18" rx="2" fill="#0d1520" stroke="var(--col-border)" stroke-width="1"/>
+            <circle cx="14" cy="9" r="5" fill="none" stroke="var(--col-muted)" stroke-width="1"/>
+            <line id="servo-needle" x1="14" y1="9" x2="14" y2="4" stroke="var(--col-accent)" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <text x="42" y="129" font-family="Share Tech Mono" font-size="6" fill="#3d5a72">SERVO·GPIO13</text>
+
+          <!-- Sensor schematic (right side) -->
+          <g id="sensor-group" transform="translate(148,115)">
+            <rect x="0" y="0" width="60" height="16" rx="2" fill="#0d1520" stroke="var(--col-border)" stroke-width="1"/>
+            <circle cx="18" cy="8" r="4" fill="none" stroke="var(--col-muted)" stroke-width="1"/>
+            <circle cx="42" cy="8" r="4" fill="none" stroke="var(--col-muted)" stroke-width="1"/>
+            <!-- Sonar waves (hidden when idle) -->
+            <circle id="sw1" class="sensor-wave" cx="42" cy="8" r="4" fill="none" stroke="var(--col-accent)" stroke-width="1" opacity="0"/>
+            <circle id="sw2" class="sensor-wave" cx="42" cy="8" r="4" fill="none" stroke="var(--col-accent)" stroke-width="1" opacity="0" style="animation-delay:.4s"/>
+          </g>
+          <text x="148" y="144" font-family="Share Tech Mono" font-size="6" fill="#3d5a72">HC-SR04·TRIG:2 ECHO:15</text>
+        </svg>
+
+        <!-- Simulate button -->
+        <div class="mt-4 flex flex-col items-center gap-2">
+          <button id="sim-btn" class="sim-btn w-full" onclick="triggerVehicle()">
+            ▶  Simulate Vehicle Detection
+          </button>
+          <p class="text-xs text-center" style="color:var(--col-muted); font-family:'Share Tech Mono',monospace">
+            Triggers sensor at &lt;250 cm threshold
+          </p>
+        </div>
+      </div>
+
+      <!-- Servo Angle Gauge -->
+      <div class="panel p-4">
+        <div class="font-display font-600 tracking-widest text-xs mb-3" style="color:var(--col-muted)">SERVO POSITION · GPIO 13</div>
+        <div class="flex items-center gap-4">
+          <svg viewBox="0 0 100 60" class="w-24 flex-shrink-0">
+            <!-- Arc background -->
+            <path d="M10,55 A45,45 0 0,1 90,55" fill="none" stroke="var(--col-border)" stroke-width="6" stroke-linecap="round"/>
+            <!-- Arc fill -->
+            <path id="servo-arc" d="M10,55 A45,45 0 0,1 90,55" fill="none" stroke="var(--col-accent2)" stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="141" stroke-dashoffset="141" style="transition:stroke-dashoffset .8s ease"/>
+            <!-- Needle -->
+            <line id="gauge-needle" x1="50" y1="55" x2="10" y2="55"
+              stroke="var(--col-accent)" stroke-width="2" stroke-linecap="round"
+              style="transform-origin:50px 55px; transform:rotate(0deg); transition:transform .8s ease"/>
+            <circle cx="50" cy="55" r="3" fill="var(--col-accent)"/>
+            <text x="50" y="52" text-anchor="middle" font-family="Share Tech Mono" font-size="7" fill="var(--col-muted)">0°</text>
+            <text x="10" y="52" text-anchor="middle" font-family="Share Tech Mono" font-size="6" fill="var(--col-muted)">0°</text>
+            <text x="90" y="52" text-anchor="middle" font-family="Share Tech Mono" font-size="6" fill="var(--col-muted)">90°</text>
+          </svg>
+          <div>
+            <div class="font-mono text-3xl font-700" style="color:var(--col-accent)" id="servo-angle-val">90°</div>
+            <div class="text-xs mt-1" style="color:var(--col-muted)">Current angle</div>
+            <div class="text-xs mt-1 font-mono" style="color:var(--col-muted)" id="servo-state-label">CLOSED</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── COL 2 & 3: Stats + Log ─────────────────────────── -->
+    <div class="md:col-span-2 flex flex-col gap-4">
+
+      <!-- Stat cards row -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <!-- Distance -->
+        <div class="panel p-3">
+          <div class="text-xs tracking-widest mb-1 font-display" style="color:var(--col-muted)">DISTANCE</div>
+          <div class="font-mono text-2xl font-700" style="color:var(--col-accent)" id="stat-distance">---</div>
+          <div class="text-xs mt-1" style="color:var(--col-muted)">centimetres</div>
+        </div>
+        <!-- Detections -->
+        <div class="panel p-3">
+          <div class="text-xs tracking-widest mb-1 font-display" style="color:var(--col-muted)">DETECTIONS</div>
+          <div class="font-mono text-2xl font-700" style="color:var(--col-amber)" id="stat-detections">0</div>
+          <div class="text-xs mt-1" style="color:var(--col-muted)">this session</div>
+        </div>
+        <!-- Gate cycles -->
+        <div class="panel p-3">
+          <div class="text-xs tracking-widest mb-1 font-display" style="color:var(--col-muted)">GATE CYCLES</div>
+          <div class="font-mono text-2xl font-700" style="color:var(--col-blue)" id="stat-cycles">0</div>
+          <div class="text-xs mt-1" style="color:var(--col-muted)">open / close</div>
+        </div>
+        <!-- Uptime -->
+        <div class="panel p-3">
+          <div class="text-xs tracking-widest mb-1 font-display" style="color:var(--col-muted)">UPTIME</div>
+          <div class="font-mono text-2xl font-700" style="color:var(--col-green)" id="uptime-val">00:00</div>
+          <div class="text-xs mt-1" style="color:var(--col-muted)">hh:mm:ss</div>
+        </div>
+      </div>
+
+      <!-- Distance bar + RGB status row -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <!-- Distance bar -->
+        <div class="panel p-4 md:col-span-2">
+          <div class="flex justify-between items-center mb-2">
+            <span class="font-display font-600 text-xs tracking-widest" style="color:var(--col-muted)">SENSOR RANGE · HC-SR04</span>
+            <span class="font-mono text-xs" style="color:var(--col-accent)" id="dist-label">-- / 500 cm</span>
+          </div>
+          <div class="w-full h-4 rounded-sm overflow-hidden" style="background:var(--col-border)">
+            <div id="dist-bar-fill" class="h-full rounded-sm" style="width:0%; background:var(--col-accent2)"></div>
+          </div>
+          <!-- Threshold marker -->
+          <div class="relative mt-1" style="height:12px">
+            <div class="absolute top-0 h-3 border-l border-dashed" style="left:50%; border-color:var(--col-amber); opacity:.6"></div>
+            <span class="absolute text-xs font-mono" style="left:50%; transform:translateX(-50%); color:var(--col-amber); font-size:.6rem; top:0">250cm threshold</span>
+          </div>
+        </div>
+
+        <!-- RGB LED status -->
+        <div class="panel p-4">
+          <div class="font-display font-600 text-xs tracking-widest mb-3" style="color:var(--col-muted)">RGB LED STATUS</div>
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <span id="led-r" class="w-3 h-3 rounded-full" style="background:#3d5a72; transition:background .3s, box-shadow .3s"></span>
+              <span class="font-mono text-xs" style="color:var(--col-muted)">RED  · GPIO 12</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="led-g" class="w-3 h-3 rounded-full" style="background:#3d5a72; transition:background .3s, box-shadow .3s"></span>
+              <span class="font-mono text-xs" style="color:var(--col-muted)">GRN · GPIO 14</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="led-b" class="w-3 h-3 rounded-full" style="background:#3d5a72; transition:background .3s, box-shadow .3s"></span>
+              <span class="font-mono text-xs" style="color:var(--col-muted)">BLU  · GPIO 27</span>
+            </div>
+          </div>
+          <div id="led-label" class="font-mono text-xs mt-3" style="color:var(--col-muted)">ALL OFF</div>
+        </div>
+      </div>
+
+      <!-- Event log -->
+      <div class="panel p-4 flex-1">
+        <div class="flex items-center justify-between mb-3">
+          <span class="font-display font-600 tracking-widest text-xs" style="color:var(--col-muted)">SYSTEM EVENT LOG</span>
+          <button onclick="clearLog()" class="font-mono text-xs px-2 py-1 border"
+            style="border-color:var(--col-border); color:var(--col-muted); background:transparent; cursor:pointer">
+            CLEAR
+          </button>
+        </div>
+        <div id="event-log" style="height:200px; padding-right:6px"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════════════════ -->
+  <footer class="relative z-10 mt-4 flex justify-between items-center">
+    <span class="font-mono text-xs" style="color:var(--col-muted)">ESP32 · HC-SR04 · SERVO PWM · RGB LED</span>
+    <span class="font-mono text-xs" style="color:var(--col-muted)">UNIT-01 · GATE-A · SECTOR-3</span>
+  </footer>
+
+<!-- ════════════════════════════════════════════════════════
+     JAVASCRIPT — Simulation Engine
+════════════════════════════════════════════════════════ -->
+<script>
+// ── State ────────────────────────────────────────────────────
+const State = { CLOSED:'closed', OPENING:'opening', OPEN:'open', CLOSING:'closing' };
+let gateState     = State.CLOSED;
+let servoAngle    = 90;      // Start at 90° (closed)
+let detections    = 0;
+let cycles        = 0;
+let sessionStart  = Date.now();
+let simDistance   = 500;
+let sweepInterval = null;
+let holdTimer     = null;
+let blinkInterval = null;
+let blinkState    = false;
+
+// ── DOM refs ─────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const badge       = $('gate-status-badge');
+const badgeText   = $('gate-status-text');
+const gateBar     = $('gate-bar');
+const rgbLed      = $('rgb-led');
+const servoNeedle = $('servo-needle');    // SVG gate illustration needle
+const gaugeNeedle = $('gauge-needle');    // Gauge panel needle
+const servoArc    = $('servo-arc');
+const servoAngleVal  = $('servo-angle-val');
+const servoStateLabel= $('servo-state-label');
+const distLabel   = $('dist-label');
+const distBarFill = $('dist-bar-fill');
+const statDist    = $('stat-distance');
+const statDet     = $('stat-detections');
+const statCyc     = $('stat-cycles');
+const ledR        = $('led-r');
+const ledG        = $('led-g');
+const ledB        = $('led-b');
+const ledLabel    = $('led-label');
+const eventLog    = $('event-log');
+const simBtn      = $('sim-btn');
+const sw1         = $('sw1');
+const sw2         = $('sw2');
+
+// ── Logging ──────────────────────────────────────────────────
+function log(msg, type='info') {
+  const now  = new Date();
+  const ts   = now.toTimeString().slice(0,8);
+  const el   = document.createElement('div');
+  el.className = `log-entry log-${type}`;
+  el.innerHTML = `<span class="log-ts">[${ts}]</span>  ${msg}`;
+  eventLog.prepend(el);
+  if (eventLog.children.length > 50) eventLog.lastChild.remove();
+}
+function clearLog() { eventLog.innerHTML = ''; }
+
+// ── Clock & Uptime ───────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  $('clock-time').textContent = now.toTimeString().slice(0,8);
+  $('clock-date').textContent = now.toLocaleDateString('en-GB');
+  const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+  const h = String(Math.floor(elapsed/3600)).padStart(2,'0');
+  const m = String(Math.floor((elapsed%3600)/60)).padStart(2,'0');
+  const s = String(elapsed%60).padStart(2,'0');
+  $('uptime-val').textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Sensor simulation — idle random distance ─────────────────
+function updateIdleSensor() {
+  if (gateState !== State.CLOSED) return;
+  simDistance = Math.floor(Math.random() * 150) + 300; // 300–450 cm
+  updateDistanceUI(simDistance);
+}
+setInterval(updateIdleSensor, 1200);
+
+function updateDistanceUI(d) {
+  const capped = Math.min(d, 500);
+  const pct    = (capped / 500) * 100;
+  distBarFill.style.width = pct + '%';
+  distBarFill.style.backgroundColor = d <= 250 ? 'var(--col-red)' : 'var(--col-accent2)';
+  distLabel.textContent = `${capped} / 500 cm`;
+  statDist.textContent  = capped;
+}
+
+// ── RGB LED helpers ──────────────────────────────────────────
+function ledsOff() {
+  [ledR, ledG, ledB].forEach(l => {
+    l.style.background  = '#3d5a72';
+    l.style.boxShadow   = 'none';
+  });
+  ledLabel.textContent = 'ALL OFF';
+  ledLabel.style.color = 'var(--col-muted)';
+  rgbLed.setAttribute('fill','#3d5a72');
+}
+function setLed(pin, color, labelText) {
+  ledsOff();
+  pin.style.background = color;
+  pin.style.boxShadow  = `0 0 10px ${color}`;
+  ledLabel.textContent = labelText;
+  ledLabel.style.color = color;
+  rgbLed.setAttribute('fill', color);
+}
+function startLedBlink(pin, color, labelText) {
+  stopLedBlink();
+  blinkState = true;
+  blinkInterval = setInterval(() => {
+    blinkState = !blinkState;
+    if (blinkState) setLed(pin, color, labelText);
+    else { ledsOff(); ledLabel.textContent = labelText; }
+  }, 250);
+}
+function stopLedBlink() {
+  if (blinkInterval) { clearInterval(blinkInterval); blinkInterval = null; }
+}
+
+// ── Badge update ─────────────────────────────────────────────
+function updateBadge(state, text) {
+  badge.className = `status-badge gate-${state}`;
+  badgeText.textContent = text;
+}
+
+// ── Servo angle update ───────────────────────────────────────
+function setServoAngle(angle) {
+  servoAngle = angle;
+  // Gate bar: 90° closed = horizontal (rotate 0), 0° open = rotate -90deg
+  const barRot = -(90 - angle);  // 90° → 0deg rotation, 0° → -90deg
+  gateBar.style.transform = `rotate(${barRot}deg)`;
+  // Gauge needle: 0°→ left end, 90° → right end of arc
+  const gaugeRot = (angle / 90) * 180;  // 0→0°, 90→180°
+  gaugeNeedle.style.transform = `rotate(${gaugeRot}deg)`;
+  // Arc fill
+  const arcOffset = 141 - (angle / 90) * 141;
+  servoArc.style.strokeDashoffset = arcOffset;
+  // Illustration servo needle
+  servoNeedle.style.transform = `rotate(${-angle}deg)`;
+  // Text
+  servoAngleVal.textContent = angle + '°';
+  servoStateLabel.textContent = angle >= 90 ? 'CLOSED' : angle === 0 ? 'OPEN' : 'MOVING...';
+}
+
+// ── Sensor waves ─────────────────────────────────────────────
+function showSensorWaves(on) {
+  [sw1, sw2].forEach(el => el.style.opacity = on ? '1' : '0');
+}
+
+// ── Main state machine ───────────────────────────────────────
+function triggerVehicle() {
+  if (gateState !== State.CLOSED) return;
+  detections++;
+  statDet.textContent = detections;
+  simDistance = Math.floor(Math.random() * 100) + 50; // 50–150 cm
+  updateDistanceUI(simDistance);
+  showSensorWaves(true);
+  log('Vehicle detected — distance: ' + simDistance + ' cm', 'warn');
+  openGate();
+}
+
+function openGate() {
+  gateState = State.OPENING;
+  simBtn.disabled = true;
+  updateBadge('opening', 'Gate Opening...');
+  log('Initiating gate open sequence — servo sweep 90°→0°', 'info');
+  startLedBlink(ledR, 'var(--col-red)', 'RED BLINK — OPENING');
+
+  let angle = 90;
+  sweepInterval = setInterval(() => {
+    angle -= 3;
+    if (angle <= 0) {
+      angle = 0;
+      clearInterval(sweepInterval);
+      setServoAngle(0);
+      gateFullyOpen();
+    } else {
+      setServoAngle(angle);
+    }
+  }, 40);
+}
+
+function gateFullyOpen() {
+  gateState = State.OPEN;
+  cycles++;
+  statCyc.textContent = cycles;
+  stopLedBlink();
+  setLed(ledG, 'var(--col-green)', 'GREEN — GATE OPEN');
+  updateBadge('open', 'Gate Open');
+  log('Gate fully open (0°) — holding for 5 seconds', 'ok');
+  showSensorWaves(false);
+
+  // Simulate vehicle passing — distance rises after 2s
+  setTimeout(() => {
+    simDistance = Math.floor(Math.random() * 150) + 300;
+    updateDistanceUI(simDistance);
+    log('Vehicle cleared sensor — distance: ' + simDistance + ' cm', 'info');
+  }, 2000);
+
+  holdTimer = setTimeout(() => {
+    closeGate();
+  }, 5000);
+}
+
+function closeGate() {
+  gateState = State.CLOSING;
+  stopLedBlink();
+  updateBadge('closing', 'Gate Closing...');
+  log('Path clear — initiating gate close sequence — servo sweep 0°→90°', 'close');
+  startLedBlink(ledB, 'var(--col-blue)', 'BLUE BLINK — CLOSING');
+
+  let angle = 0;
+  sweepInterval = setInterval(() => {
+    angle += 3;
+    if (angle >= 90) {
+      angle = 90;
+      clearInterval(sweepInterval);
+      setServoAngle(90);
+      gateFullyClosed();
+    } else {
+      setServoAngle(angle);
+    }
+  }, 40);
+}
+
+function gateFullyClosed() {
+  gateState = State.CLOSED;
+  stopLedBlink();
+  ledsOff();
+  updateBadge('closed', 'Gate Closed');
+  simBtn.disabled = false;
+  log('Gate fully closed (90°) — system ready', 'ok');
+  updateIdleSensor();
+}
+
+// ── Initialise ───────────────────────────────────────────────
+setServoAngle(90);
+updateDistanceUI(500);
+log('SmartGate system online — all modules initialised', 'ok');
+log('Servo initialised at 90° (CLOSED)', 'info');
+log('HC-SR04 range set: max 500 cm  |  threshold 250 cm', 'info');
+log('RGB LED: all off  |  Waiting for vehicle...', 'info');
+</script>
+</body>
+</html>

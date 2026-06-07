@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SmartGate — Blockly Custom Block</title>
+
+  <!--
+    Using jsDelivr CDN (more reliable than unpkg) + Blockly v9.3.3
+    Scripts must load in this exact order, no async/defer
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/blockly@9.3.3/blockly_compressed.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/blockly@9.3.3/msg/en.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/blockly@9.3.3/javascript_compressed.js"></script>
+
+  <style>
+    :root {
+      --bg:      #0f1923;
+      --panel:   #0d1520;
+      --border:  #1a2a3a;
+      --cyan:    #00d4ff;
+      --green:   #00ff88;
+      --amber:   #ffb800;
+      --muted:   #3d5a72;
+      --text:    #c8dae8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: .9rem; font-weight: 700; letter-spacing: .1em; color: var(--cyan); }
+    header p  { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Layout: workspace | right panel ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Blockly area */
+    #blockly-area {
+      flex: 1;
+      position: relative;
+    }
+    #blocklyDiv {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* Right panel */
+    .right-panel {
+      width: 310px;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .section-label {
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 14px 4px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Instructions */
+    .instructions {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 7px;
+      font-size: .75rem;
+      color: #7a9ab2;
+      line-height: 1.5;
+    }
+    .step:last-child { margin-bottom: 0; }
+    .step-num {
+      background: var(--border);
+      color: var(--cyan);
+      border-radius: 50%;
+      width: 17px; height: 17px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .hi { color: var(--cyan); font-weight: 600; }
+
+    /* Generated code */
+    #code-output {
+      flex: 1;
+      background: #070c14;
+      padding: 10px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: .75rem;
+      line-height: 1.7;
+      color: #a8c8e0;
+      white-space: pre;
+      overflow-y: auto;
+      border: none;
+      outline: none;
+      resize: none;
+      width: 100%;
+    }
+
+    /* Run button */
+    #run-btn {
+      margin: 10px 14px;
+      padding: 9px;
+      background: transparent;
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+      flex-shrink: 0;
+    }
+    #run-btn:hover { background: var(--cyan); color: #070c14; }
+
+    /* Console */
+    #console-out {
+      background: #070c14;
+      border-top: 1px solid var(--border);
+      padding: 8px 14px;
+      font-family: 'Courier New', monospace;
+      font-size: .73rem;
+      line-height: 1.6;
+      color: var(--green);
+      min-height: 60px;
+      max-height: 100px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    /* Error banner (hidden by default) */
+    #error-banner {
+      display: none;
+      background: #3a0a0a;
+      border: 1px solid #ff3b3b;
+      color: #ff8888;
+      font-size: .75rem;
+      padding: 8px 14px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⬡ SMARTGATE — BLOCKLY CUSTOM BLOCK</h1>
+    <p>Part 2 · open_gate_with_speed · Robotics Assignment</p>
+  </div>
+  <div style="font-size:.7rem; color:var(--muted); text-align:right; font-family:monospace; line-height:1.6">
+    Block: <span style="color:var(--green)">open_gate_with_speed</span><br>
+    API: <span style="color:var(--green)">Blockly v9</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Blockly workspace -->
+  <div id="blockly-area">
+    <div id="blocklyDiv"></div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="right-panel">
+
+    <!-- Error banner shown if Blockly fails -->
+    <div id="error-banner">
+      ⚠ Blockly failed to load. Check your internet connection and refresh.
+    </div>
+
+    <!-- Instructions -->
+    <div class="instructions">
+      <div class="step"><div class="step-num">1</div><div>Open <span class="hi">Gate Control</span> in the left toolbox</div></div>
+      <div class="step"><div class="step-num">2</div><div>Drag <span class="hi">Open Gate speed [ ]</span> to workspace</div></div>
+      <div class="step"><div class="step-num">3</div><div>Click the number and set speed <span class="hi">1–10</span></div></div>
+      <div class="step"><div class="step-num">4</div><div>See <span class="hi">Generated Code</span> update live below</div></div>
+      <div class="step"><div class="step-num">5</div><div>Click <span class="hi">▶ Run</span> to see servo output</div></div>
+    </div>
+
+    <div class="section-label">Generated JavaScript Code</div>
+    <textarea id="code-output" readonly>// Drag "Open Gate" block here to see code...</textarea>
+
+    <button id="run-btn" onclick="runCode()">▶ Run Generated Code</button>
+
+    <div class="section-label">Console Output</div>
+    <div id="console-out">// Output appears here after clicking Run...</div>
+
+  </div>
+</div>
+
+<!-- Toolbox XML -->
+<xml id="toolbox" style="display:none">
+  <category name="Gate Control" colour="160">
+    <block type="open_gate_with_speed">
+      <field name="SPEED">5</field>
+    </block>
+  </category>
+  <category name="Logic" colour="%{BKY_LOGIC_HUE}">
+    <block type="controls_if"></block>
+    <block type="logic_compare"></block>
+    <block type="logic_boolean"></block>
+  </category>
+  <category name="Loops" colour="%{BKY_LOOPS_HUE}">
+    <block type="controls_repeat_ext">
+      <value name="TIMES">
+        <block type="math_number"><field name="NUM">3</field></block>
+      </value>
+    </block>
+  </category>
+  <category name="Math" colour="%{BKY_MATH_HUE}">
+    <block type="math_number"><field name="NUM">0</field></block>
+    <block type="math_arithmetic"></block>
+  </category>
+  <category name="Text" colour="%{BKY_TEXTS_HUE}">
+    <block type="text"></block>
+    <block type="text_print"></block>
+  </category>
+  <category name="Variables" colour="%{BKY_VARIABLES_HUE}" custom="VARIABLE"></category>
+</xml>
+
+<!-- Starter block pre-loaded in workspace -->
+<xml id="startBlocks" style="display:none">
+  <block type="open_gate_with_speed" x="60" y="60">
+    <field name="SPEED">5</field>
+  </block>
+</xml>
+
+<script>
+// ── Guard: show error if Blockly didn't load ─────────────────
+if (typeof Blockly === 'undefined') {
+  document.getElementById('error-banner').style.display = 'block';
+  document.getElementById('blocklyDiv').innerHTML =
+    '<div style="color:#ff8888;padding:20px;font-family:monospace">'+
+    'Blockly failed to load.<br>Please check your internet connection and refresh.</div>';
+  throw new Error('Blockly not loaded');
+}
+
+// ════════════════════════════════════════════════════════════
+//  1. JSON Block Definition
+//     Defines how the block looks in the workspace.
+// ════════════════════════════════════════════════════════════
+Blockly.defineBlocksWithJsonArray([{
+  "type":        "open_gate_with_speed",
+  "message0":    "Open Gate   speed %1",
+  "args0": [{
+    "type":      "field_number",
+    "name":      "SPEED",
+    "value":     5,
+    "min":       1,
+    "max":       10,
+    "precision": 1
+  }],
+  "previousStatement": null,
+  "nextStatement":     null,
+  "colour":            160,
+  "tooltip":           "Opens the Smart Gate servo. Speed 1 = slow (9°), Speed 10 = fast (90°).",
+  "helpUrl":           ""
+}]);
+
+
+// ════════════════════════════════════════════════════════════
+//  2. JavaScript Code Generator  (Blockly v9 API)
+//     In v9: Blockly.JavaScript['blockType'] = function(block){...}
+//     Returns the code string to emit for this block.
+// ════════════════════════════════════════════════════════════
+Blockly.JavaScript['open_gate_with_speed'] = function(block) {
+
+  // Read speed value from the block field
+  var speed = Number(block.getFieldValue('SPEED'));
+
+  // Clamp to valid range 1–10
+  speed = Math.min(10, Math.max(1, speed));
+
+  // Map speed → servo angle:  speed * 9  → range 9°–90°
+  //   Speed 1  →  9° (slow)
+  //   Speed 5  → 45° (medium)
+  //   Speed 10 → 90° (full open)
+  var angle = speed * 9;
+
+  var code =
+    '// open_gate_with_speed block\n' +
+    'var speed = ' + speed + ';              // Speed level (1–10)\n' +
+    'var angle = speed * 9;     // Servo angle = ' + angle + '°\n' +
+    'servo.write(angle);        // Move servo to ' + angle + '°\n' +
+    'console.log("Gate opening: speed=" + speed + "  servo.write(' + angle + ')");\n';
+
+  return code;
+};
+
+
+// ════════════════════════════════════════════════════════════
+//  3. Inject Blockly workspace into the page
+// ════════════════════════════════════════════════════════════
+var workspace = Blockly.inject('blocklyDiv', {
+  toolbox:    document.getElementById('toolbox'),
+  scrollbars: true,
+  trashcan:   true,
+  zoom: {
+    controls:   true,
+    wheel:      true,
+    startScale: 1.0,
+    maxScale:   2,
+    minScale:   0.4,
+    scaleSpeed: 1.2
+  },
+  grid: {
+    spacing: 24,
+    length:  4,
+    colour:  '#1a2a3a',
+    snap:    true
+  }
+});
+
+// Load the starter block
+Blockly.Xml.domToWorkspace(
+  document.getElementById('startBlocks'),
+  workspace
+);
+
+
+// ════════════════════════════════════════════════════════════
+//  4. Live code generation — updates on every workspace change
+// ════════════════════════════════════════════════════════════
+function updateCode() {
+  var code = Blockly.JavaScript.workspaceToCode(workspace);
+  document.getElementById('code-output').value =
+    code || '// Workspace empty.\n// Drag "Open Gate" block from Gate Control.';
+}
+workspace.addChangeListener(updateCode);
+updateCode(); // initial run
+
+
+// ════════════════════════════════════════════════════════════
+//  5. Run button — executes generated code in the browser
+//     servo.write() is simulated and logs to the console panel
+// ════════════════════════════════════════════════════════════
+function runCode() {
+  var outEl = document.getElementById('console-out');
+  var logs  = [];
+
+  // Simulated servo object
+  var servo = {
+    write: function(angle) {
+      logs.push('> servo.write(' + angle + ')  ✓  Servo → ' + angle + '°');
+    }
+  };
+
+  var fakeConsole = {
+    log: function() {
+      logs.push('> ' + Array.prototype.join.call(arguments, ' '));
+    }
+  };
+
+  try {
+    var code = Blockly.JavaScript.workspaceToCode(workspace);
+    if (!code.trim()) {
+      outEl.innerHTML = '<span style="color:var(--amber)">⚠ Add a block first then click Run.</span>';
+      return;
+    }
+    // Run generated code with simulated servo
+    // eslint-disable-next-line no-new-func
+    new Function('servo', 'console', code)(servo, fakeConsole);
+    outEl.textContent = logs.join('\n') || '(no output)';
+  } catch(e) {
+    outEl.innerHTML = '<span style="color:#ff8888">Error: ' + e.message + '</span>';
+  }
+}
+
+// Resize Blockly when window resizes
+window.addEventListener('resize', function() {
+  Blockly.svgResize(workspace);
+});
+</script>
+</body>
+</html>
